@@ -1,0 +1,16 @@
+[project]
+name = "fastserver"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.17.1",
+    "fastapi>=0.121.1",
+    "loguru>=0.7.3",
+    "motor>=3.7.1",
+    "pydantic-settings>=2.11.0",
+    "python-jose>=3.5.0",
+    "redis>=7.0.1",
+    "sqlalchemy>=2.0.44",
+    "uvicorn>=0.38.0",
+]

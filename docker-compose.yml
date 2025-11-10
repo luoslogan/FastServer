@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # FastAPI 应用服务
+  api:
+    build: .
+    container_name: fastapi_app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/code/app
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+      - mongodb
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - fastapi_network
+
+  # PostgreSQL 数据库服务
+  db:
+    image: postgres:15-alpine
+    container_name: fastapi_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - fastapi_network
+
+  # Redis 服务
+  redis:
+    image: redis:7-alpine
+    container_name: fastapi_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - fastapi_network
+
+  # MongoDB 服务
+  mongodb:
+    image: mongo:7-alpine
+    container_name: fastapi_mongodb
+    environment:
+      # MONGO_INITDB_ROOT_USERNAME 和 MONGO_INITDB_ROOT_PASSWORD 是 MongoDB 容器初始化时创建 root 用户的环境变量
+      # 这些变量只在容器首次启动时使用，用于创建初始的 root 用户
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - fastapi_network
+    command: mongod --auth
+
+volumes:
+  postgres_data:
+  redis_data:
+  mongodb_data:
+
+networks:
+  fastapi_network:
+    driver: bridge
+
