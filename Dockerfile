@@ -22,9 +22,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     gcc \
     postgresql-client \
-    # 额外添加爬虫可能需要的 SSL/TLS 依赖
     libssl-dev \
-    # 清理缓存，减小镜像大小
     && rm -rf /var/lib/apt/lists/*
 
 # 复制并安装 Python 依赖 (利用 Docker 缓存机制)
@@ -51,8 +49,7 @@ WORKDIR /code
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     tzdata \
-    # 可选：如果需要 postgresql-client 用于调试，取消下面的注释
-    # postgresql-client \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # 从构建阶段复制安装好的 Python 依赖 (这是多阶段构建的关键!)
