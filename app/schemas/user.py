@@ -2,9 +2,11 @@
 用户相关的 Pydantic 模型（扩展）
 """
 
+from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, EmailStr, Field
 
+from app.schemas.base import BaseResponseModel
 from app.schemas.role import RoleListResponse
 
 
@@ -24,7 +26,7 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
-class UserResponse(BaseModel):
+class UserResponse(BaseResponseModel):
     """用户响应模型"""
 
     id: int
@@ -33,12 +35,10 @@ class UserResponse(BaseModel):
     full_name: Optional[str]
     is_active: bool
     is_superuser: bool
+    email_verified: bool = False
     roles: List[RoleListResponse] = []
-    created_at: str
-    updated_at: str
-
-    class Config:
-        from_attributes = True
+    created_at: datetime
+    updated_at: datetime
 
 
 class UserRoleAssign(BaseModel):

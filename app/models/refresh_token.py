@@ -3,9 +3,8 @@ Refresh Token 数据库模型
 用于存储 Refresh Token 信息、设备信息、登录历史等
 """
 
-from sqlalchemy import Boolean, Column, Integer, String, DateTime, Text, ForeignKey
+from sqlalchemy import Boolean, Column, Integer, String, DateTime, Text, ForeignKey, text
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 
 from app.core.db import Base
 
@@ -20,7 +19,7 @@ class RefreshToken(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
     created_at = Column(
-        DateTime(timezone=True), server_default=func.now, nullable=False
+        DateTime(timezone=True), nullable=False, server_default=text("now()"), comment="创建时间"
     )
     revoked = Column(Boolean, default=False, nullable=False, index=True)
     revoked_at = Column(DateTime(timezone=True), nullable=True)

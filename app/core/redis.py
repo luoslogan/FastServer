@@ -1,5 +1,9 @@
 from typing import Optional
+
+from loguru import logger
 from redis.asyncio import Redis, ConnectionPool
+from redis.exceptions import RedisError
+
 from app.core.config import settings
 
 # Redis 连接池实例（单例模式）
@@ -27,14 +31,19 @@ async def get_redis_client() -> Redis:
     """
     global _pool, _redis_client  # noqa: PLW0603
     if _pool is None or _redis_client is None:
-        # 创建连接池
-        _pool = ConnectionPool.from_url(
-            _build_redis_url(),
-            max_connections=50,  # 最大连接数
-            decode_responses=True,  # 自动解码响应为字符串
-        )
-        # 创建 Redis 客户端
-        _redis_client = Redis(connection_pool=_pool)
+        try:
+            # 创建连接池
+            _pool = ConnectionPool.from_url(
+                _build_redis_url(),
+                max_connections=50,  # 最大连接数
+                decode_responses=True,  # 自动解码响应为字符串
+            )
+            # 创建 Redis 客户端
+            _redis_client = Redis(connection_pool=_pool)
+            logger.info(f"Redis 客户端已创建: {settings.REDIS_HOST}:{settings.REDIS_PORT}")
+        except Exception as e:
+            logger.error(f"创建 Redis 客户端失败: {e}")
+            raise
 
     return _redis_client
 

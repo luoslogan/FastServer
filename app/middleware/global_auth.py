@@ -21,14 +21,16 @@
 """
 
 from typing import Callable
+
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
+from loguru import logger
+from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
-from sqlalchemy import select
 
-from app.core.security import decode_access_token
 from app.core.db import AsyncSessionLocal
+from app.core.security import decode_access_token
 from app.models.user import User
 
 
@@ -83,6 +85,12 @@ class GlobalAuthMiddleware(BaseHTTPMiddleware):
         # 获取 Token
         token = self._get_token_from_request(request)
         if not token:
+            client_ip = request.client.host if request.client else "unknown"
+            path = request.url.path or "/"
+            method = request.method
+            logger.debug(
+                f"认证失败: 未提供认证凭据 - {method} {path} - IP: {client_ip}"
+            )
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 content={"detail": "未提供认证凭据"},
@@ -92,6 +100,12 @@ class GlobalAuthMiddleware(BaseHTTPMiddleware):
         # 验证 Token 并获取用户
         user = await self._authenticate_token(token)
         if not user:
+            client_ip = request.client.host if request.client else "unknown"
+            path = request.url.path or "/"
+            method = request.method
+            logger.warning(
+                f"认证失败: 无效的认证凭据 - {method} {path} - IP: {client_ip}"
+            )
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 content={"detail": "无效的认证凭据"},
@@ -100,6 +114,9 @@ class GlobalAuthMiddleware(BaseHTTPMiddleware):
 
         # 检查用户是否激活
         if not user.is_active:
+            logger.warning(
+                f"认证失败: 用户已被禁用 - user_id={user.id}, username={user.username}, path={request.url.path}"
+            )
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
                 content={"detail": "用户已被禁用"},
@@ -194,7 +211,7 @@ class GlobalAuthMiddleware(BaseHTTPMiddleware):
                 if user:
                     await db.refresh(user)
                 return user
-        except Exception:
+        except Exception as e:
             # 捕获所有异常, 避免中间件崩溃影响整个应用
-            # 在生产环境中应该记录日志
+            logger.exception(f"Token 认证异常: {e}")
             return None

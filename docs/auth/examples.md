@@ -34,6 +34,12 @@
 - 自动设置 `request.state.userinfo`
 - 与依赖注入系统协作，性能优化
 
+✅ **邮箱验证和密码重置**
+- 邮箱验证功能（注册时自动发送验证邮件）
+- 密码重置功能（忘记密码，通过邮箱重置）
+- 支持纯后端完成（不需要前端）
+- 支持前端页面配合（可选）
+
 ## 二、使用示例
 
 ### 1. 用户注册
@@ -620,6 +626,141 @@ curl -X POST "http://localhost:8000/api/v1/auth/login" \
 curl -X GET "http://localhost:8000/api/v1/auth/me" \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
 ```
+
+## 三、邮箱验证和密码重置示例
+
+### 1. 邮箱验证流程
+
+#### 注册时自动发送验证邮件
+
+用户注册后，系统会自动发送验证邮件到用户邮箱。
+
+```bash
+# 1. 用户注册
+curl -X POST "http://localhost:8000/api/v1/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "testuser",
+    "email": "test@example.com",
+    "password": "password123",
+    "full_name": "Test User"
+  }'
+
+# 响应: 用户创建成功，验证邮件已发送
+```
+
+#### 验证邮箱（GET方式 - 直接通过浏览器访问）
+
+用户点击邮件中的验证链接，浏览器直接访问后端API：
+
+```bash
+# 用户点击邮件中的链接:
+# http://localhost:8000/api/v1/auth/verify-email?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# 浏览器自动访问，后端返回HTML页面显示验证结果
+```
+
+#### 验证邮箱（POST方式 - 前端API调用）
+
+前端页面可以调用API验证邮箱：
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/auth/verify-email" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -d '{
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }'
+
+# 响应:
+# {
+#   "message": "邮箱验证成功"
+# }
+```
+
+#### 重新发送验证邮件
+
+如果用户没有收到验证邮件，可以重新发送：
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/auth/resend-verification-email" \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# 响应:
+# {
+#   "message": "验证邮件已发送，请查收邮箱"
+# }
+```
+
+### 2. 密码重置流程
+
+#### 忘记密码（发送重置邮件）
+
+用户忘记密码时，请求发送重置邮件：
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/auth/forgot-password" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com"
+  }'
+
+# 响应（无论邮箱是否存在都返回成功，防止邮箱枚举）:
+# {
+#   "message": "如果该邮箱已注册, 密码重置邮件已发送，请查收邮箱"
+# }
+```
+
+#### 密码重置页面（GET方式 - 显示表单）
+
+用户点击邮件中的重置链接，浏览器打开重置表单页面：
+
+```bash
+# 用户点击邮件中的链接:
+# http://localhost:8000/api/v1/auth/reset-password-page?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# 浏览器自动访问，后端返回HTML表单页面
+# 用户在表单中输入新密码并提交
+```
+
+#### 重置密码（POST方式 - 提交新密码）
+
+用户提交新密码：
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/auth/reset-password" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "new_password": "newpassword123"
+  }'
+
+# 响应:
+# {
+#   "message": "密码重置成功，请使用新密码登录"
+# }
+```
+
+### 3. 配置SMTP服务
+
+在使用邮箱验证和密码重置功能前，需要在`.env`文件中配置SMTP服务：
+
+```env
+# Gmail 示例配置
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASSWORD=your-app-password  # Gmail应用专用密码
+SMTP_FROM_EMAIL=your-email@gmail.com
+SMTP_FROM_NAME=FastAPI Server
+SMTP_USE_TLS=true
+FRONTEND_URL=http://localhost:8000  # 或你的前端地址
+```
+
+**Gmail配置步骤**：
+1. 启用两步验证
+2. 生成应用专用密码：https://myaccount.google.com/apppasswords
+3. 使用应用专用密码作为 `SMTP_PASSWORD`
 
 ### 使用 FastAPI 文档测试
 

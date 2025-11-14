@@ -1,4 +1,6 @@
 from typing import AsyncGenerator
+
+from loguru import logger
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 
@@ -43,5 +45,9 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         try:
             yield session
+        except Exception as e:
+            logger.error(f"数据库会话异常: {e}")
+            await session.rollback()
+            raise
         finally:
             await session.close()

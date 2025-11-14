@@ -6,15 +6,16 @@ Token 管理工具
 """
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, List
 
+from loguru import logger
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
-from app.core.redis import get_redis_client
 from app.core.config import settings
+from app.core.redis import get_redis_client
 from app.core.security import hash_token
 from app.models.refresh_token import RefreshToken
 
@@ -65,7 +66,9 @@ class TokenService:
             str: Token 哈希值
         """
         token_hash = hash_token(token)
-        expires_at = datetime.now() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+        )
 
         # 存储到 Redis
         if redis is None:
@@ -74,7 +77,7 @@ class TokenService:
         token_data = {
             "user_id": user_id,
             "username": username,
-            "created_at": datetime.now().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "expires_at": expires_at.isoformat(),
             "device_info": json.dumps(device_info) if device_info else None,
             "ip_address": ip_address,
@@ -82,7 +85,7 @@ class TokenService:
         }
 
         # 计算 TTL (秒)
-        ttl = int((expires_at - datetime.now()).total_seconds())
+        ttl = int((expires_at - datetime.now(timezone.utc)).total_seconds())
 
         # 存储到 Redis
         await redis.setex(
@@ -118,6 +121,9 @@ class TokenService:
             )
             db.add(db_token)
             await db.commit()
+            logger.debug(
+                f"Refresh Token 已存储: user_id={user_id}, username={username}, device_type={device_type}"
+            )
 
         return token_hash
 
@@ -177,7 +183,7 @@ class TokenService:
 
         # 计算剩余 TTL
         expires_at = datetime.fromisoformat(token_data["expires_at"])
-        ttl = int((expires_at - datetime.now()).total_seconds())
+        ttl = int((expires_at - datetime.now(timezone.utc)).total_seconds())
         if ttl > 0:
             # 加入黑名单
             await redis.setex(
@@ -201,8 +207,11 @@ class TokenService:
             db_token = result.scalar_one_or_none()
             if db_token:
                 db_token.revoked = True
-                db_token.revoked_at = datetime.now()
+                db_token.revoked_at = datetime.now(timezone.utc)
                 await db.commit()
+                logger.info(
+                    f"Refresh Token 已撤销: token_hash={token_hash[:16]}..., user_id={user_id}"
+                )
 
         return True
 
@@ -231,12 +240,14 @@ class TokenService:
 
         count = 0
         for token_hash in token_hashes:
-            if await TokenService.revoke_refresh_token(token_hash.decode(), redis, db):
+            # Redis 配置了 decode_responses=True, 所以返回的是字符串, 不需要 decode
+            if await TokenService.revoke_refresh_token(token_hash, redis, db):
                 count += 1
 
         # 删除用户的 Token 集合
         await redis.delete(TokenService._get_user_tokens_key(user_id))
 
+        logger.info(f"已撤销用户所有 Token: user_id={user_id}, 撤销数量={count}")
         return count
 
     @staticmethod
@@ -261,10 +272,21 @@ class TokenService:
         if not include_revoked:
             query = query.where(~RefreshToken.revoked)
 
+        # 只返回未过期的 Token (使用 UTC 时区比较)
+        now = datetime.now(timezone.utc)
+        query = query.where(RefreshToken.expires_at > now)
+
         query = query.order_by(RefreshToken.created_at.desc())
 
         result = await db.execute(query)
-        return list(result.scalars().all())
+        tokens = list(result.scalars().all())
+
+        logger.debug(
+            f"查询用户 Token: user_id={user_id}, include_revoked={include_revoked}, "
+            f"找到 {len(tokens)} 个有效 Token (当前时间: {now.isoformat()})"
+        )
+
+        return tokens
 
     @staticmethod
     async def cleanup_expired_tokens(db: AsyncSession) -> int:
@@ -280,7 +302,7 @@ class TokenService:
         result = await db.execute(
             select(RefreshToken).where(
                 and_(
-                    RefreshToken.expires_at < datetime.now(),
+                    RefreshToken.expires_at < datetime.now(timezone.utc),
                     ~RefreshToken.revoked,
                 )
             )
@@ -294,4 +316,3 @@ class TokenService:
 
         await db.commit()
         return count
-

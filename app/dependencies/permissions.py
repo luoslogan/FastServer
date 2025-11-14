@@ -4,18 +4,20 @@
 
 import json
 from typing import List, Set
+
 from fastapi import Depends, HTTPException, status
+from loguru import logger
+from redis.asyncio import Redis
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from redis.asyncio import Redis
-from redis.exceptions import RedisError
 
 from app.core.db import get_db
-from app.models.user import User
-from app.models.role import Role
-from app.dependencies.auth import get_current_user
 from app.core.redis import get_redis_client
+from app.dependencies.auth import get_current_user
+from app.models.role import Role
+from app.models.user import User
 
 
 async def get_user_roles(
@@ -150,6 +152,10 @@ def require_permission(permission_name: str):
         if "*" in permissions or permission_name in permissions:
             return current_user
 
+        logger.warning(
+            f"权限检查失败: user_id={current_user.id}, username={current_user.username}, "
+            f"required_permission={permission_name}, user_permissions={list(permissions)[:10]}"
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"需要权限: {permission_name}",
@@ -197,6 +203,10 @@ def require_role(role_name: str):
         if role_name in role_names:
             return current_user
 
+        logger.warning(
+            f"角色检查失败: user_id={current_user.id}, username={current_user.username}, "
+            f"required_role={role_name}, user_roles={list(role_names)}"
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"需要角色: {role_name}",

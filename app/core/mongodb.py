@@ -1,5 +1,8 @@
 from typing import Optional
+
+from loguru import logger
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+
 from app.core.config import settings
 
 # MongoDB 客户端实例（单例模式，按需连接）
@@ -15,10 +18,15 @@ async def get_mongodb_client() -> AsyncIOMotorClient:
     """
     global _client
     if _client is None:
-        _client = AsyncIOMotorClient(
-            settings.MONGODB_URL,
-            serverSelectionTimeoutMS=5000,
-        )
+        try:
+            _client = AsyncIOMotorClient(
+                settings.MONGODB_URL,
+                serverSelectionTimeoutMS=5000,
+            )
+            logger.info("MongoDB 客户端已创建")
+        except Exception as e:
+            logger.error(f"创建 MongoDB 客户端失败: {e}")
+            raise
     return _client
 
 
