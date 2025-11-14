@@ -2,8 +2,11 @@
 角色相关的 Pydantic 模型
 """
 
+from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, Field
+
+from app.schemas.base import BaseResponseModel
 
 
 class PermissionResponse(BaseModel):
@@ -36,24 +39,23 @@ class RoleCreate(RoleBase):
 class RoleUpdate(BaseModel):
     """更新角色请求模型"""
 
-    name: Optional[str] = Field(None, min_length=2, max_length=50, description="角色名称")
+    name: Optional[str] = Field(
+        None, min_length=2, max_length=50, description="角色名称"
+    )
     description: Optional[str] = Field(None, description="角色描述")
     is_super_admin: Optional[bool] = Field(None, description="是否为超级管理员角色")
 
 
-class RoleResponse(RoleBase):
+class RoleResponse(BaseResponseModel, RoleBase):
     """角色响应模型"""
 
     id: int
     permissions: List[PermissionResponse] = []
-    created_at: str
-    updated_at: str
-
-    class Config:
-        from_attributes = True
+    created_at: datetime
+    updated_at: datetime
 
 
-class RoleListResponse(BaseModel):
+class RoleListResponse(BaseResponseModel):
     """角色列表响应模型"""
 
     id: int
@@ -61,8 +63,4 @@ class RoleListResponse(BaseModel):
     description: Optional[str] = None
     is_super_admin: bool
     permission_count: int = 0
-    created_at: str
-
-    class Config:
-        from_attributes = True
-
+    created_at: datetime

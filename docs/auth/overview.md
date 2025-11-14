@@ -27,8 +27,8 @@
 - ✅ 用户登录（用户名/密码、邮箱/密码）
 - ✅ 密码加密存储（bcrypt）
 - ✅ 用户信息管理
-- ❌ 密码重置（待实现）
-- ❌ 邮箱/手机验证（待实现）
+- ✅ **邮箱验证**（注册时自动发送验证邮件，24小时有效期）
+- ✅ **密码重置**（忘记密码，通过邮箱重置，1小时有效期）
 
 ### 2. 认证机制
 - ✅ JWT Token 生成和验证
@@ -113,6 +113,7 @@ app/
 - hashed_password: 加密后的密码
 - is_active: 是否激活
 - is_superuser: 是否超级用户
+- **email_verified: 邮箱是否已验证**（新增字段）
 - created_at: 创建时间
 - updated_at: 更新时间
 
@@ -287,6 +288,12 @@ app/
 - `DELETE /api/v1/auth/devices/{device_id}` - 撤销指定设备
 - `POST /api/v1/auth/devices/revoke-all` - 撤销所有设备
 - `POST /api/v1/users/me/change-password` - 修改密码（自动撤销所有 Token）
+- `GET /api/v1/auth/verify-email?token=xxx` - 验证邮箱（GET方式，直接通过浏览器访问）
+- `POST /api/v1/auth/verify-email` - 验证邮箱（POST方式，供前端API调用）
+- `POST /api/v1/auth/resend-verification-email` - 重新发送验证邮件
+- `POST /api/v1/auth/forgot-password` - 忘记密码（发送重置邮件）
+- `GET /api/v1/auth/reset-password-page?token=xxx` - 密码重置页面（GET方式，显示重置表单）
+- `POST /api/v1/auth/reset-password` - 重置密码（POST方式，提交新密码）
 
 ### 权限检查流程
 
@@ -369,7 +376,88 @@ python scripts/init_rbac.py
 python scripts/create_superuser.py admin admin@example.com password123
 ```
 
-## 七、当前项目状态
+## 七、邮箱验证和密码重置功能
+
+### 邮箱验证功能
+
+系统实现了完整的邮箱验证机制，确保用户邮箱的有效性。
+
+#### 功能特点
+- ✅ 注册时自动发送验证邮件
+- ✅ 24小时有效期（Token过期时间）
+- ✅ 支持重新发送验证邮件
+- ✅ 支持纯后端完成（不需要前端）
+- ✅ 支持前端页面配合（可选）
+
+#### 工作流程
+1. 用户注册 → 后端创建用户（`email_verified=False`）
+2. 后端生成验证Token（包含user_id、email、type="email_verification"）
+3. 后端通过SMTP发送验证邮件
+4. 用户点击邮件中的验证链接
+5. 后端验证Token，更新`email_verified=True`
+
+#### 配置要求
+需要在`.env`文件中配置SMTP相关环境变量：
+```env
+SMTP_HOST=smtp.gmail.com          # SMTP服务器地址
+SMTP_PORT=587                     # SMTP端口
+SMTP_USER=your-email@gmail.com    # SMTP用户名
+SMTP_PASSWORD=your-app-password   # SMTP密码或应用专用密码
+SMTP_FROM_EMAIL=your-email@gmail.com  # 发件人邮箱
+SMTP_FROM_NAME=FastAPI Server     # 发件人名称
+SMTP_USE_TLS=true                 # 是否使用TLS
+FRONTEND_URL=http://localhost:8000  # 前端URL或后端API URL
+```
+
+#### API接口
+- `GET /api/v1/auth/verify-email?token=xxx` - 验证邮箱（GET方式，返回HTML页面）
+- `POST /api/v1/auth/verify-email` - 验证邮箱（POST方式，返回JSON）
+- `POST /api/v1/auth/resend-verification-email` - 重新发送验证邮件
+
+### 密码重置功能
+
+系统实现了安全的密码重置机制，通过邮箱验证身份。
+
+#### 功能特点
+- ✅ 忘记密码时发送重置邮件
+- ✅ 1小时有效期（Token过期时间，比验证Token更短）
+- ✅ 重置后自动撤销所有登录Token（强制重新登录）
+- ✅ 邮箱枚举防护（无论邮箱是否存在都返回成功消息）
+- ✅ 支持纯后端完成（不需要前端）
+- ✅ 支持前端页面配合（可选）
+
+#### 工作流程
+1. 用户请求重置密码 → 提供邮箱地址
+2. 后端查询用户，生成重置Token（包含user_id、email、type="password_reset"）
+3. 后端通过SMTP发送重置邮件
+4. 用户点击邮件中的重置链接
+5. 后端返回密码重置表单页面（HTML + JavaScript）
+6. 用户输入新密码并提交
+7. 后端验证Token，更新密码，撤销所有Refresh Token
+
+#### 安全机制
+- Token包含邮箱匹配验证，防止邮箱变更后的误用
+- Token类型验证，防止验证Token被用于重置密码
+- 重置后撤销所有Token，强制用户重新登录
+- 邮箱枚举防护，防止恶意用户通过此接口枚举邮箱
+
+#### API接口
+- `POST /api/v1/auth/forgot-password` - 忘记密码（发送重置邮件）
+- `GET /api/v1/auth/reset-password-page?token=xxx` - 密码重置页面（GET方式，显示表单）
+- `POST /api/v1/auth/reset-password` - 重置密码（POST方式，提交新密码）
+
+### 邮件服务配置
+
+系统支持任何SMTP服务器，包括：
+- **Gmail**: `smtp.gmail.com:587`（需要应用专用密码）
+- **Outlook**: `smtp.office365.com:587`
+- **QQ邮箱**: `smtp.qq.com:587`（需要授权码）
+- **163邮箱**: `smtp.163.com:25`或`465`
+- **第三方服务**: SendGrid、Mailgun、AWS SES等
+
+详细配置说明请参考代码注释和配置文件。
+
+## 八、当前项目状态
 
 ✅ **已实现**:
 - 用户注册和登录
@@ -381,14 +469,14 @@ python scripts/create_superuser.py admin admin@example.com password123
 - **登录历史记录**（设备信息、IP地址、登录时间）
 - 密码加密存储（bcrypt）
 - **密码修改接口**（自动撤销所有 Token）
+- **邮箱验证功能**（注册时自动发送验证邮件）
+- **密码重置功能**（忘记密码，通过邮箱重置）
 - RBAC 权限系统（角色、权限管理）
 - 依赖注入系统（用户、角色、权限检查）
 - Redis 权限缓存优化
 - 用户、角色、权限管理 API
 
 ❌ **待实现**:
-- 密码重置（忘记密码）
-- 邮箱验证
 - 速率限制（Rate Limiting）
 - 登录失败次数限制
 - Token 刷新时的轮换机制（可选）

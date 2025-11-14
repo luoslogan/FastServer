@@ -2,7 +2,8 @@
 # 阶段 1: 基础环境与构建阶段 (Build Stage)
 # 目的: 安装依赖和构建任何 C 扩展，保持最终镜像整洁。
 # ------------------------------------------------------------
-FROM python:3.12-slim as builder
+
+FROM python:3.12-slim AS builder
 
 # 设置核心环境变量
 # PYTHONUNBUFFERED=1 确保日志立即输出 (极其重要)

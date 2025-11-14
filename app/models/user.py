@@ -2,9 +2,8 @@
 用户数据库模型
 """
 
-from sqlalchemy import Boolean, Column, Integer, String, DateTime
+from sqlalchemy import Boolean, Column, Integer, String, DateTime, text
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 
 from app.core.db import Base
 
@@ -21,14 +20,20 @@ class User(Base):
     full_name = Column(String(100), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     is_superuser = Column(Boolean, default=False, nullable=False)
+    email_verified = Column(
+        Boolean, default=False, nullable=False, comment="邮箱是否已验证"
+    )
     created_at = Column(
-        DateTime(timezone=True), server_default=func.now, nullable=False
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+        comment="创建时间",
     )
     updated_at = Column(
         DateTime(timezone=True),
-        server_default=func.now,
-        onupdate=func.now,
         nullable=False,
+        server_default=text("now()"),
+        comment="更新时间",
     )
 
     # 关系：用户-角色（多对多）

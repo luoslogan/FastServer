@@ -5,7 +5,10 @@
 """
 
 from typing import Optional
+
+from loguru import logger
 from redis.asyncio import Redis
+from redis.exceptions import RedisError
 
 from app.core.redis import get_redis_client
 from app.dependencies.permissions import clear_user_permissions_cache
@@ -31,8 +34,13 @@ async def clear_user_cache(user_id: int, redis: Optional[Redis] = None):
     if redis is None:
         redis = await get_redis_client()
 
-    # 清除权限缓存
-    await clear_user_permissions_cache(user_id, redis)
+    try:
+        # 清除权限缓存
+        await clear_user_permissions_cache(user_id, redis)
+        logger.debug(f"用户缓存已清除: user_id={user_id}")
+    except RedisError as e:
+        logger.error(f"清除用户缓存失败: user_id={user_id}, error={e}")
+        raise
 
     # 可以在这里添加其他用户相关缓存的清除逻辑
     # 例如: 用户信息缓存, 用户会话缓存等
@@ -84,6 +92,11 @@ async def clear_role_users_cache(role, redis: Optional[Redis] = None):
         return
 
     # 清除所有拥有此角色的用户的权限缓存
+    user_count = len(role.users)
+    logger.debug(f"开始清除角色相关用户缓存: role_id={role.id}, role_name={role.name}, 用户数量={user_count}")
     for user in role.users:
-        await clear_user_permissions_cache(user.id, redis)
+        try:
+            await clear_user_permissions_cache(user.id, redis)
+        except RedisError as e:
+            logger.error(f"清除用户缓存失败: user_id={user.id}, role_id={role.id}, error={e}")
 

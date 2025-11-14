@@ -3,23 +3,25 @@
 """
 
 from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from loguru import logger
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.core.db import get_db
-from app.models.role import Role
+from app.dependencies.auth import require_superuser
 from app.models.permission import Permission
+from app.models.role import Role
 from app.schemas.role import (
     RoleCreate,
     RoleUpdate,
     RoleResponse,
     RoleListResponse,
 )
-from app.dependencies.auth import require_superuser
 from app.utils.cache import clear_role_users_cache
-from redis.exceptions import RedisError
 
 router = APIRouter(prefix="/roles", tags=["角色管理"])
 
@@ -41,6 +43,7 @@ async def create_role(
     # 检查角色名称是否已存在
     result = await db.execute(select(Role).where(Role.name == role_data.name))
     if result.scalar_one_or_none() is not None:
+        logger.warning(f"创建角色失败: 角色名称已存在 - {role_data.name}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="角色名称已存在"
         )
@@ -59,6 +62,9 @@ async def create_role(
         )
         permissions = result.scalars().all()
         if len(permissions) != len(role_data.permission_ids):
+            logger.warning(
+                f"创建角色失败: 部分权限ID不存在 - role_name={role_data.name}, permission_ids={role_data.permission_ids}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="部分权限ID不存在"
             )
@@ -71,6 +77,7 @@ async def create_role(
     # 加载权限关系
     await db.refresh(db_role, ["permissions"])
 
+    logger.info(f"角色创建成功: {db_role.name} (ID: {db_role.id})")
     return db_role
 
 
@@ -175,10 +182,13 @@ async def update_role(
     # 清除所有拥有此角色的用户的权限缓存
     try:
         await clear_role_users_cache(role)
+        logger.info(
+            f"角色已更新: role_id={role_id}, name={role.name}, 已清除相关用户缓存"
+        )
     except (RedisError, AttributeError) as e:
         # Redis 错误或关系未加载错误不应该影响角色更新操作
         # 缓存会在下次查询时自动更新
-        pass
+        logger.error(f"清除角色用户缓存失败: role_id={role_id}, error={e}")
 
     return role
 
@@ -203,10 +213,13 @@ async def delete_role(
     # 清除所有拥有此角色的用户的权限缓存
     try:
         await clear_role_users_cache(role)
+        logger.info(
+            f"角色已删除: role_id={role_id}, name={role.name}, 已清除相关用户缓存"
+        )
     except (RedisError, AttributeError) as e:
         # Redis 错误或关系未加载错误不应该影响角色删除操作
         # 缓存会在下次查询时自动更新
-        pass
+        logger.error(f"清除角色用户缓存失败: role_id={role_id}, error={e}")
 
     await db.delete(role)
     await db.commit()
@@ -256,10 +269,13 @@ async def assign_permission_to_role(
     # 清除所有拥有此角色的用户的权限缓存
     try:
         await clear_role_users_cache(role)
+        logger.info(
+            f"权限已分配给角色: role_id={role_id}, permission_id={permission_id}, 已清除相关用户缓存"
+        )
     except (RedisError, AttributeError) as e:
         # Redis 错误或关系未加载错误不应该影响权限分配操作
         # 缓存会在下次查询时自动更新
-        pass
+        logger.error(f"清除角色用户缓存失败: role_id={role_id}, error={e}")
 
     return role
 
@@ -306,9 +322,12 @@ async def remove_permission_from_role(
     # 清除所有拥有此角色的用户的权限缓存
     try:
         await clear_role_users_cache(role)
+        logger.info(
+            f"权限已从角色移除: role_id={role_id}, permission_id={permission_id}, 已清除相关用户缓存"
+        )
     except (RedisError, AttributeError) as e:
         # Redis 错误或关系未加载错误不应该影响权限移除操作
         # 缓存会在下次查询时自动更新
-        pass
+        logger.error(f"清除角色用户缓存失败: role_id={role_id}, error={e}")
 
     return role

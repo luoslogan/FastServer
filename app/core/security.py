@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from jose import JWTError, jwt
+from loguru import logger
 from passlib.context import CryptContext
 
 from app.core.config import settings
@@ -86,7 +87,8 @@ def decode_access_token(token: str) -> Optional[dict]:
             token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
         )
         return payload
-    except JWTError:
+    except JWTError as e:
+        logger.debug(f"Token 解码失败: {e}")
         return None
 
 
@@ -146,7 +148,8 @@ def decode_refresh_token(token: str) -> Optional[dict]:
             return None
 
         return payload
-    except JWTError:
+    except JWTError as e:
+        logger.debug(f"Refresh Token 解码失败: {e}")
         return None
 
 
@@ -161,3 +164,89 @@ def hash_token(token: str) -> str:
         str: Token 的 SHA256 哈希值
     """
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def create_email_verification_token(user_id: int, email: str) -> str:
+    """
+    创建邮箱验证 Token
+
+    Args:
+        user_id: 用户ID
+        email: 邮箱地址
+
+    Returns:
+        str: 验证 Token
+    """
+    data = {
+        "user_id": user_id,
+        "email": email,
+        "type": "email_verification",
+    }
+    expires_delta = timedelta(hours=24)  # 24小时过期
+    return create_access_token(data, expires_delta=expires_delta)
+
+
+def decode_email_verification_token(token: str) -> Optional[dict]:
+    """
+    解码邮箱验证 Token
+
+    Args:
+        token: 验证 Token
+
+    Returns:
+        dict: 解码后的数据，如果 Token 无效则返回 None
+    """
+    try:
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
+        # 验证 Token 类型
+        if payload.get("type") != "email_verification":
+            return None
+        return payload
+    except JWTError as e:
+        logger.debug(f"邮箱验证 Token 解码失败: {e}")
+        return None
+
+
+def create_password_reset_token(user_id: int, email: str) -> str:
+    """
+    创建密码重置 Token
+
+    Args:
+        user_id: 用户ID
+        email: 邮箱地址
+
+    Returns:
+        str: 重置 Token
+    """
+    data = {
+        "user_id": user_id,
+        "email": email,
+        "type": "password_reset",
+    }
+    expires_delta = timedelta(hours=1)  # 1小时过期
+    return create_access_token(data, expires_delta=expires_delta)
+
+
+def decode_password_reset_token(token: str) -> Optional[dict]:
+    """
+    解码密码重置 Token
+
+    Args:
+        token: 重置 Token
+
+    Returns:
+        dict: 解码后的数据，如果 Token 无效则返回 None
+    """
+    try:
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
+        # 验证 Token 类型
+        if payload.get("type") != "password_reset":
+            return None
+        return payload
+    except JWTError as e:
+        logger.debug(f"密码重置 Token 解码失败: {e}")
+        return None

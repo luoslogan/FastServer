@@ -3,14 +3,20 @@
 """
 
 from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.db import get_db
-from app.models.permission import Permission
-from app.schemas.permission import PermissionCreate, PermissionUpdate, PermissionResponse
 from app.dependencies.auth import require_superuser
+from app.models.permission import Permission
+from app.schemas.permission import (
+    PermissionCreate,
+    PermissionUpdate,
+    PermissionResponse,
+)
 
 router = APIRouter(prefix="/permissions", tags=["权限管理"])
 
@@ -36,6 +42,7 @@ async def create_permission(
         select(Permission).where(Permission.name == permission_data.name)
     )
     if result.scalar_one_or_none() is not None:
+        logger.warning(f"创建权限失败: 权限名称已存在 - {permission_data.name}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="权限名称已存在"
         )
@@ -52,6 +59,7 @@ async def create_permission(
     await db.commit()
     await db.refresh(db_permission)
 
+    logger.info(f"权限创建成功: {db_permission.name} (ID: {db_permission.id})")
     return db_permission
 
 
@@ -74,7 +82,9 @@ async def get_permissions(
     if resource:
         query = query.where(Permission.resource == resource)
 
-    query = query.offset(skip).limit(limit).order_by(Permission.resource, Permission.action)
+    query = (
+        query.offset(skip).limit(limit).order_by(Permission.resource, Permission.action)
+    )
 
     result = await db.execute(query)
     permissions = result.scalars().all()
@@ -90,15 +100,11 @@ async def get_permission(
     """
     获取权限详情
     """
-    result = await db.execute(
-        select(Permission).where(Permission.id == permission_id)
-    )
+    result = await db.execute(select(Permission).where(Permission.id == permission_id))
     permission = result.scalar_one_or_none()
 
     if permission is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="权限不存在"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="权限不存在")
 
     return permission
 
@@ -113,15 +119,11 @@ async def update_permission(
     """
     更新权限（需要超级用户权限）
     """
-    result = await db.execute(
-        select(Permission).where(Permission.id == permission_id)
-    )
+    result = await db.execute(select(Permission).where(Permission.id == permission_id))
     permission = result.scalar_one_or_none()
 
     if permission is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="权限不存在"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="权限不存在")
 
     # 更新字段
     if permission_data.resource is not None:
@@ -141,6 +143,9 @@ async def update_permission(
             )
         )
         if existing.scalar_one_or_none() is not None:
+            logger.warning(
+                f"更新权限失败: 权限名称已存在 - permission_id={permission_id}, new_name={new_name}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"权限名称 '{new_name}' 已存在",
@@ -150,6 +155,7 @@ async def update_permission(
     await db.commit()
     await db.refresh(permission)
 
+    logger.info(f"权限已更新: permission_id={permission_id}, name={permission.name}")
     return permission
 
 
@@ -162,18 +168,13 @@ async def delete_permission(
     """
     删除权限（需要超级用户权限）
     """
-    result = await db.execute(
-        select(Permission).where(Permission.id == permission_id)
-    )
+    result = await db.execute(select(Permission).where(Permission.id == permission_id))
     permission = result.scalar_one_or_none()
 
     if permission is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="权限不存在"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="权限不存在")
 
     await db.delete(permission)
     await db.commit()
 
     return None
-
